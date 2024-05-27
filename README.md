@@ -7,12 +7,12 @@
 ## Usage
 - clone this repo
 ```
-git clone https://github.com/nazo/webtransport-go-chat.git
+git clone https://github.com/jaehooni/webtransport-go-video.git
 ```
 - Follow the installation instructions of [mkcert](https://github.com/FiloSottile/mkcert)
 - create `localhost.pem` and `localhost-key.pem`
 ```
-cd webtransport-go-chat
+cd webtransport-go-video
 mkcert -install
 mkcert localhost
 ```
