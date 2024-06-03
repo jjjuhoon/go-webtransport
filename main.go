@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,37 +11,7 @@ import (
 	"github.com/quic-go/webtransport-go"
 )
 
-// type MessageServer struct {
-// 	listeners []chan []byte
-// }
-
-// func (m *MessageServer) Subscribe() chan []byte {
-// 	ch := make(chan []byte)
-// 	m.listeners = append(m.listeners, ch)
-// 	return ch
-// }
-
-// func (m *MessageServer) Unsubscribe(ch chan []byte) {
-// 	for i := range m.listeners {
-// 		if m.listeners[i] == ch {
-// 			m.listeners = m.listeners[:i+copy(m.listeners[i:], m.listeners[i+1:])]
-// 			close(ch)
-// 			break
-// 		}
-// 	}
-// }
-
-// func (m *MessageServer) Broadcast(message []byte) {
-// 	for _, ch := range m.listeners {
-// 		ch <- message
-// 	}
-// }
-
 func main() {
-	// messageServer := &MessageServer{
-	// 	listeners: make([]chan []byte, 0),
-	// }
-
 	wt := webtransport.Server{
 		H3: http3.Server{
 			Addr: ":4433",
@@ -50,101 +21,63 @@ func main() {
 		},
 	}
 
-	// sessionID := 0
-
-	// http.HandleFunc("/video", func(w http.ResponseWriter, r *http.Request) {
-	http.HandleFunc("/video", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf("Request in!!!")
+	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Request in!!!")
 		session, err := wt.Upgrade(w, r)
 		if err != nil {
-			log.Printf("upgrading failed: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Upgrading failed: %s", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
-		stream, _ := session.OpenUniStream()
-
-		w.WriteHeader(http.StatusOK)
-		videoFile, err := os.Open("./video.mp4");
-		if err != nil{
+		stream, err := session.OpenUniStream()
+		if err != nil {
+			log.Printf("Failed to open unidirectional stream: %s", err)
 			return
 		}
-		defer videoFile.Close();
+		defer stream.Close()
 
-		w.Header().Set("Content-Type", "video/mp4");
-		w.Header().Set("Transfer-Encoding", "chunked");
+		// 메타데이터 JSON 인코딩 및 전송
+		metadata := struct {
+			MimeType string `json:"mimeType"`
+		}{
+			MimeType: "image/jpeg",
+		}
+		encoder := json.NewEncoder(stream)
+		if err := encoder.Encode(&metadata); err != nil {
+			log.Printf("Failed to send metadata: %v", err)
+			return
+		}
 
-		buffer := make([]byte, 1024);
+		// 이미지 파일 데이터 전송
+		imageFile, err := os.Open("후쿠오카.jpg")
+		if err != nil {
+			log.Printf("Failed to open image file: %v", err)
+			return
+		}
+		defer imageFile.Close()
 
+		buffer := make([]byte, 1024)
 		for {
-			n, _ := videoFile.Read(buffer)
-			_, err := stream.Write(buffer[:n]);
-			if err == nil{
-				break
+			n, err := imageFile.Read(buffer)
+			if err != nil {
+				if err.Error() == "EOF" {
+					log.Println("Finished reading image file")
+					break
+				}
+				log.Printf("Failed to read image file: %v", err)
+				return
+			}
+
+			_, err = stream.Write(buffer[:n])
+			if err != nil {
+				log.Printf("Failed to write to stream: %v", err)
+				return
 			}
 		}
-
-		// sessionID += 1
-		// log.Printf("Session #%d start.", sessionID)
-
-		// messageCh := messageServer.Subscribe()
-		// closeCh := make(chan int)
-		// wg := &sync.WaitGroup{}
-
-		// メッセージを送信する
-		// wg.Add(1)
-		// go (func() {
-		// 	defer wg.Done()
-		// 	for {
-		// 		select {
-		// 		case message := <-messageCh:
-		// 			log.Printf("Send message: %s\n", message)
-		// 			stream, err := session.OpenUniStream()
-		// 			if err != nil {
-		// 				log.Println("Open stream failed:", err)
-		// 				break
-		// 			}
-		// 			_, err = stream.Write(message)
-		// 			if err != nil {
-		// 				log.Println("Send stream failed:", err)
-		// 				break
-		// 			}
-		// 			stream.Close()
-		// 		case <-closeCh:
-		// 			log.Println("Send stream closed.")
-		// 			return
-		// 		}
-		// 	}
-		// })()
-
-		// メッセージを受信する
-		// wg.Add(1)
-		// go (func() {
-		// 	defer wg.Done()
-		// 	for {
-		// 		acceptCtx, acceptCtxCancel := context.WithTimeout(session.Context(), 10*time.Minute)
-		// 		stream, err := session.AcceptUniStream(acceptCtx)
-		// 		if err != nil {
-		// 			acceptCtxCancel()
-		// 			log.Println("Accept stream failed:", err)
-		// 			break
-		// 		}
-		// 		acceptCtxCancel()
-		// 		p, err := io.ReadAll(stream)
-		// 		if err != nil {
-		// 			log.Println("Session closed, ending stream listener:", err)
-		// 			break
-		// 		}
-		// 		log.Printf("Received stream: %s", p)
-		// 		messageServer.Broadcast(p)
-		// 	}
-		// 	closeCh <- 1
-		// })()
-
-		// wg.Wait()
-		// messageServer.Unsubscribe(messageCh)
-		// log.Printf("Session #%d closed.", sessionID)
+		log.Println("Image streaming completed")
 	})
 
-	wt.ListenAndServeTLS("localhost.pem", "localhost-key.pem")
+	log.Println("Starting WebTransport server on :4433")
+	log.Fatal(wt.ListenAndServeTLS("localhost.pem", "localhost-key.pem"))
 }
