@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const { value: stream } = await reader.read();
     const streamReader = stream.getReader();
     const chunks = [];
-    let metadataReceived = false;
 
     try {
         while (true) {
@@ -24,27 +23,52 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.log('Stream reader done.');
                 break;
             }
-            if (!metadataReceived) {
-                const decoder = new TextDecoder("utf-8");
-                const metadataStr = decoder.decode(value);
-                const metadataEndIndex = metadataStr.indexOf('\n');
-                if (metadataEndIndex !== -1) {
-                    const metadata = JSON.parse(metadataStr.slice(0, metadataEndIndex));
-                    console.log('Metadata received:', metadata);
-                    metadataReceived = true;
-                    const remainingData = value.slice(metadataEndIndex + 1);
-                    if (remainingData.byteLength > 0) {
-                        chunks.push(remainingData);
-                    }
-                }
-            } else {
-                chunks.push(value);
-            }
+            chunks.push(value);
         }
 
-        const blob = new Blob(chunks, { type: 'image/jpeg' });
-        document.getElementById('imageDisplay').src = URL.createObjectURL(blob);
+        // 모든 청크를 하나의 Uint8Array로 결합
+        const combinedChunks = concatenateUint8Arrays(chunks);
+        const decoder = new TextDecoder("utf-8");
+        const jsonDataStr = decoder.decode(combinedChunks);
+        const jsonData = JSON.parse(jsonDataStr);
+
+        // Base64 문자열을 이미지로 변환
+        const imageData = jsonData.data;
+        const imageMimeType = jsonData.mimeType;
+        const imageBlob = b64toBlob(imageData, imageMimeType);
+        document.getElementById('imageDisplay').src = URL.createObjectURL(imageBlob);
     } catch (e) {
         console.error('Failed to process stream:', e);
     }
 });
+
+// Uint8Array 배열을 하나의 Uint8Array로 결합하는 함수
+function concatenateUint8Arrays(arrays) {
+    let totalLength = arrays.reduce((acc, value) => acc + value.length, 0);
+    let result = new Uint8Array(totalLength);
+    let offset = 0;
+    arrays.forEach(array => {
+        result.set(array, offset);
+        offset += array.length;
+    });
+    return result;
+}
+
+// Base64 문자열을 Blob 객체로 변환하는 함수
+function b64toBlob(b64Data, contentType = '', sliceSize = 512) {
+    const byteCharacters = atob(b64Data);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+
+    const blob = new Blob(byteArrays, { type: contentType });
+    return blob;
+}

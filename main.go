@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -37,19 +39,7 @@ func main() {
 		}
 		defer stream.Close()
 
-		// 메타데이터 JSON 인코딩 및 전송
-		metadata := struct {
-			MimeType string `json:"mimeType"`
-		}{
-			MimeType: "image/jpeg",
-		}
-		encoder := json.NewEncoder(stream)
-		if err := encoder.Encode(&metadata); err != nil {
-			log.Printf("Failed to send metadata: %v", err)
-			return
-		}
-
-		// 이미지 파일 데이터 전송
+		// 이미지 파일을 읽고 Base64로 인코딩
 		imageFile, err := os.Open("후쿠오카.jpg")
 		if err != nil {
 			log.Printf("Failed to open image file: %v", err)
@@ -57,24 +47,27 @@ func main() {
 		}
 		defer imageFile.Close()
 
-		buffer := make([]byte, 1024)
-		for {
-			n, err := imageFile.Read(buffer)
-			if err != nil {
-				if err.Error() == "EOF" {
-					log.Println("Finished reading image file")
-					break
-				}
-				log.Printf("Failed to read image file: %v", err)
-				return
-			}
-
-			_, err = stream.Write(buffer[:n])
-			if err != nil {
-				log.Printf("Failed to write to stream: %v", err)
-				return
-			}
+		imageData, err := ioutil.ReadAll(imageFile)
+		if err != nil {
+			log.Printf("Failed to read image file: %v", err)
+			return
 		}
+		encodedData := base64.StdEncoding.EncodeToString(imageData)
+
+		// MIME 타입과 인코딩된 데이터를 함께 JSON 형식으로 스트림에 전송
+		responseData := struct {
+			MimeType string `json:"mimeType"`
+			Data     string `json:"data"`
+		}{
+			MimeType: "image/jpeg", // MIME 타입 지정
+			Data:     encodedData,  // 인코딩된 이미지 데이터
+		}
+
+		if err := json.NewEncoder(stream).Encode(responseData); err != nil {
+			log.Printf("Failed to send encoded image: %v", err)
+			return
+		}
+
 		log.Println("Image streaming completed")
 	})
 
