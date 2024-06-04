@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.log('All streams processed.');
                 break;
             }
-            processStream(stream);
+            await processStream(stream); // 비동기적으로 처리
         }
     } catch (e) {
         console.error('Failed to receive streams:', e);
@@ -42,13 +42,24 @@ async function processStream(stream) {
         }
 
         const decoder = new TextDecoder("utf-8");
-        const jsonStr = decoder.decode(new Uint8Array(chunks.reduce((acc, val) => [...acc, ...val], [])));
+        const jsonStr = decoder.decode(concatenateUint8Arrays(chunks));
         const imageData = JSON.parse(jsonStr);
 
-        const img = document.createElement('img');
+        const img = document.getElementById('frame');
         img.src = `data:${imageData.mimeType};base64,${imageData.image}`;
-        document.getElementById('imageContainer').appendChild(img);
+        await new Promise(resolve => setTimeout(resolve, 100)); // 0.1초 대기
     } catch (e) {
         console.error('Failed to process stream:', e);
     }
+}
+
+function concatenateUint8Arrays(arrays) {
+    let totalLength = arrays.reduce((sum, value) => sum + value.length, 0);
+    let result = new Uint8Array(totalLength);
+    let offset = 0;
+    arrays.forEach(array => {
+        result.set(array, offset);
+        offset += array.length;
+    });
+    return result;
 }
