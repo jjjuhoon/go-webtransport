@@ -1,4 +1,4 @@
-# webtransport-go-chat
+# webtransport-go-pic
 
 ## Requirements
 
@@ -15,6 +15,8 @@ git clone https://github.com/jaehooni/webtransport-go-video.git
 cd webtransport-go-video
 mkcert -install
 mkcert localhost
+sudo sysctl -w net.core.rmem_max=7500000
+sudo sysctl -w net.core.wmem_max=7500000
 ```
 
 - (Google Chrome) Enable WebTransport Developer Mode
@@ -22,4 +24,15 @@ mkcert localhost
 
 - run `go run main.go`
 
-- open `index.html`
+----------------------------------------------------------------------------------------
+sudo snap install chromium
+
+sudo apt-get install libnss3-tools
+
+sudo apt-get install mkcert
+
+cd webtransport-go-chat
+
+mkcert -install
+
+chromium index.html
