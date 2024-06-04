@@ -16,9 +16,10 @@ import (
 )
 
 func getFiles(folderPath string) ([]string, error) {
-	files, err := filepath.Glob(filepath.Join(folderPath, "*.jpg"))
-	if err != nil {
-		return nil, err
+	var files []string
+	for i := 0; i <= 30; i++ {
+		file := filepath.Join(folderPath, fmt.Sprintf("frame_%d.jpg", i))
+		files = append(files, file)
 	}
 	return files, nil
 }
