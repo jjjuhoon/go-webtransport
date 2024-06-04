@@ -1,11 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
@@ -17,65 +18,50 @@ func main() {
 			Addr: ":4433",
 		},
 		CheckOrigin: func(r *http.Request) bool {
-			return true
+			return true // 모든 오리진 허용
 		},
 	}
 
-	http.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Request in!!!")
+	http.HandleFunc("/images", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Image request received")
 		session, err := wt.Upgrade(w, r)
 		if err != nil {
-			log.Printf("Upgrading failed: %s", err)
+			log.Printf("Failed to upgrade: %s", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
-		stream, err := session.OpenUniStream()
-		if err != nil {
-			log.Printf("Failed to open unidirectional stream: %s", err)
-			return
-		}
-		defer stream.Close()
-
-		// 메타데이터 JSON 인코딩 및 전송
-		metadata := struct {
-			MimeType string `json:"mimeType"`
-		}{
-			MimeType: "image/jpeg",
-		}
-		encoder := json.NewEncoder(stream)
-		if err := encoder.Encode(&metadata); err != nil {
-			log.Printf("Failed to send metadata: %v", err)
-			return
-		}
-
-		// 이미지 파일 데이터 전송
-		imageFile, err := os.Open("후쿠오카.jpg")
-		if err != nil {
-			log.Printf("Failed to open image file: %v", err)
-			return
-		}
-		defer imageFile.Close()
-
-		buffer := make([]byte, 1024)
-		for {
-			n, err := imageFile.Read(buffer)
+		imageFiles := []string{"사진5.png", "사진6.png", "사진1.png", "사진2.png", "사진3.png", "사진4.png"}
+		for _, imageFileName := range imageFiles {
+			stream, err := session.OpenUniStream()
 			if err != nil {
-				if err.Error() == "EOF" {
-					log.Println("Finished reading image file")
-					break
-				}
+				log.Printf("Failed to open unidirectional stream: %s", err)
+				return
+			}
+
+			imageFile, err := ioutil.ReadFile(imageFileName)
+			if err != nil {
 				log.Printf("Failed to read image file: %v", err)
-				return
+				stream.Close()
+				continue
 			}
 
-			_, err = stream.Write(buffer[:n])
-			if err != nil {
-				log.Printf("Failed to write to stream: %v", err)
-				return
+			encodedImage := base64.StdEncoding.EncodeToString(imageFile)
+			metadata := struct {
+				MimeType string `json:"mimeType"`
+				Image    string `json:"image"`
+			}{
+				MimeType: "image/png",
+				Image:    encodedImage,
 			}
+
+			encoder := json.NewEncoder(stream)
+			if err := encoder.Encode(&metadata); err != nil {
+				log.Printf("Failed to send metadata and image: %v", err)
+			}
+			stream.Close()
 		}
-		log.Println("Image streaming completed")
+		log.Println("All images have been sent")
 	})
 
 	log.Println("Starting WebTransport server on :4433")
